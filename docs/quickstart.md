@@ -52,3 +52,8 @@ The profile does not contain accuracy. Model Diet does not receive labels or com
 ## 4. Read the output
 
 Open `profile-output/profile.md` for a readable summary. The JSON file contains the same measurements in a structured format, including units and semantics for each metric. See [Measurements](measurements.md) for interpretation details and [API reference](api.md) for result fields.
+
+To explore results from multiple models in an interactive dashboard, install
+`modeldiet[viz]` and follow the [visualization guide](visualization.md). The
+dashboard lets you focus on one model or compare two or three models using the
+same metric rows and charts.

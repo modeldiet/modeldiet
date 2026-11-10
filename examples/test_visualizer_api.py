@@ -145,7 +145,11 @@ def main() -> None:
     report_html = report_path.read_text(encoding="utf-8")
     assert "Plotly.newPlot" in report_html
     assert "height:360px" in report_html
-    assert "Performance trade-offs" in report_html
+    assert 'id="panel-tradeoffs"' in report_html
+    assert 'id="tab-metrics"' in report_html
+    assert 'id="single-model"' in report_html
+    assert "Compare 2–3 models" in report_html
+    assert report_html.count('class="metric-card"') == 11
     print(f"PASS: standalone HTML report: {report_path.resolve()}")
 
     loaded = ModelDietVisualizer.from_file(fixture_path)

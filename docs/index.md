@@ -9,7 +9,8 @@ The default profile measures **single-row prediction latency only**. It does not
 1. [Install Model Diet and run the quick start](quickstart.md).
 2. Read the [application guide](application.md) for supported models, inputs, exports, and error handling.
 3. Use the [measurement guide](measurements.md) to understand the meaning and limits of each metric.
-4. Look up public functions and result classes in the [API reference](api.md).
+4. Create a tabbed, interactive report with the [visualization guide](visualization.md).
+5. Look up public functions and result classes in the [API reference](api.md).
 
 To preview the documentation locally or configure GitHub Pages, see [Host the docs](hosting.md).
 

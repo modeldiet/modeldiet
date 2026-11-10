@@ -18,6 +18,7 @@ nav:
   - Get started: quickstart.md
   - Application guide: application.md
   - Measurements: measurements.md
+  - Interactive visualization: visualization.md
   - API reference: api.md
   - Host the docs: hosting.md
 

@@ -1,121 +1,147 @@
 # Interactive visualization
 
-Install Plotly separately from the core profiler:
+ModelDiet provides Plotly figures for notebooks and scripts, plus an offline,
+standalone HTML dashboard for comparing existing profiling results. The report
+uses results you already collected; it does not train or profile models.
+
+## Install
+
+Install Plotly for interactive charts and HTML reports:
 
 ```bash
 python -m pip install "modeldiet[viz]"
 ```
 
-For the guided desktop picker, install the example model dependencies too and
-launch the demo:
+For the optional guided desktop demo, install the example model dependencies:
 
 ```bash
 python -m pip install "modeldiet[demo]"
 modeldiet-demo
 ```
 
-Choose a built-in dataset and one or more sample models, then select **Train,
-profile, and view results**. Training and measurements run locally; the
-selected models are trained once for that run. A native local dashboard
-window opens when profiling finishes; it does not launch a browser or server.
-The picker and dashboard use Tkinter from the Python standard library and
-require a desktop session. This native demo does not require Plotly.
-`visualizer.show()` opens the same native dashboard
-for results you already have. The dashboard explains latency percentiles, whole-process RSS,
-Python-traced allocation, and serialized size, including the interpretation
-limits of each measurement.
+The desktop picker and dashboard use Tkinter and need a desktop session. They
+do not need Plotly. The `show()` method opens that native dashboard for results
+you already have.
 
-`ModelDietVisualizer` accepts a mapping of display names to `ProfileResult`
-objects or ModelDiet benchmark result mappings. It does not execute models.
-Plot methods return Plotly figures, so they work in notebooks and scripts:
+## Create a dashboard
+
+`ModelDietVisualizer` accepts either `ProfileResult` objects or supported
+benchmark JSON mappings:
+
+```python
+from modeldiet.visualization import ModelDietVisualizer
+
+visualizer = ModelDietVisualizer.from_file("results.json")
+visualizer.generate_report(
+    "modeldiet-report.html",
+    experiment_name="April model comparison",
+)
+```
+
+Open `modeldiet-report.html` in a browser. The report is self-contained and
+works offline. It contains Overview, Metrics, Latency, Memory, Deployment,
+Trade-offs, and Model details tabs. The tab bar stays visible while scrolling.
+
+## Select one model or compare models
+
+A selector above the tabs controls every report view:
+
+- **One model** displays one selected model across the overview, metrics,
+  details, and charts.
+- **Compare 2–3 models** updates those same views for two or three selected
+  models. The report prevents selecting more than three.
+
+The Metrics tab keeps a consistent set of rows in either mode. Each row shows
+the selected model value or `Unavailable`. Expand a metric to see its
+plain-English meaning, guidance on whether higher or lower is generally
+favorable, and a link to read more.
+
+| Metric | General direction | What it tells you |
+| --- | --- | --- |
+| Accuracy | Higher is generally better | Share of predictions correct for this task and evaluation split. |
+| Mean latency, P50, P95, P99 | Lower is generally better | Prediction time; P95 and P99 describe slower tail observations. |
+| RSS before/after | Lower generally uses fewer resources | Whole-process memory snapshots, not model-only memory or peak usage. |
+| RSS change | A smaller increase is generally preferable | Difference between snapshots; negative means RSS fell during the interval. |
+| Python-traced peak | Lower generally uses fewer Python-managed allocations | Native library allocations may not be included. |
+| Model loading time | Lower is generally better for startup | Depends on storage, cache state, and loading method. |
+| Serialized model size | Lower reduces storage and transfer | Pickle representation size, not in-memory size or necessarily the deployment artifact. |
+
+These are guidelines for like-for-like comparisons, not an overall model score.
+For example, RSS includes the Python process and its other loaded data. The
+report links to scikit-learn's accuracy documentation, NIST's percentile guide,
+and the psutil and Python documentation for memory and serialization details.
+
+## Use Plotly figures directly
+
+Plot methods return figures that can be shown or exported individually:
 
 ```python
 from modeldiet.visualization import ModelDietVisualizer
 
 visualizer = ModelDietVisualizer({"Classifier A": result_a, "Classifier B": result_b})
 visualizer.plot_latency_comparison().show()
-visualizer.compare_models("Classifier A", "Classifier B").show()
 visualizer.plot_memory_comparison(models=["Classifier A", "Classifier B"])
-visualizer.generate_report("modeldiet-report.html", experiment_name="April run")
+visualizer.compare_models("Classifier A", "Classifier B").show()
+visualizer.plot_normalized_comparison(
+    ["p99_ms", "serialized_size_mib"], baseline="Classifier A"
+).show()
 ```
 
-Use `ModelDietVisualizer.from_file("results.json")` to load either a combined
-mapping or a single benchmark-worker JSON record. Use `theme="dark"` in the
-constructor for dark figures and reports. `plot_latency_comparison()` accepts
-`p50_ms`, `p95_ms`, and `p99_ms`. `plot_latency_distribution()` accepts
-`ecdf`, `box`, or `violin`, and renders observations only if the results
-actually include `latency_observations_ms`. The ECDF view falls back to a
-clearly labeled line through supplied P50/P95/P99 points when only summaries
-exist; it does not invent raw observations. Box and violin charts require raw
-observations and explain when they are unavailable.
+In a Jupyter notebook, call a plot method in a cell to render it inline. Use
+`.write_html("chart.html")` to export one figure. Use `theme="dark"` in the
+constructor for dark figures and reports.
 
-`visualizer.available_metrics` maps public metric names to the models that
-provide them. Missing or non-finite measurements remain unavailable in charts;
-they are never replaced with zero. For example, a model without P99 latency is
-left out of that plotted bar and an explanatory note identifies the missing
-series. Results may be `ProfileResult` instances or supported benchmark JSON
-mappings, including nested `measurement_details` and legacy flat fields.
+Available public plots include latency percentiles, mean latency, latency
+distribution, process RSS, Python-traced memory, loading time, serialized
+size, accuracy-versus-latency, normalized metrics, and pairwise comparison.
+`plot_latency_comparison()` accepts `p50_ms`, `p95_ms`, and `p99_ms`.
+`plot_latency_distribution()` accepts `ecdf`, `box`, or `violin`.
 
-For a CLI report, pass one or more per-model JSON files or a combined mapping:
+The ECDF uses retained `latency_observations_ms` when supplied. If only P50,
+P95, or P99 summaries are available, it shows those reported points as a
+clearly labeled percentile summary; it does not invent raw observations. Box
+and violin plots need raw observations and explain when they are unavailable.
+
+`visualizer.available_metrics` maps metric identifiers to the models that
+provide them. Missing and non-finite values remain unavailable rather than
+being changed to zero. Supported result mappings include nested
+`measurement_details` and legacy flat fields.
+
+## Generate a report from the CLI
+
+Pass a combined result mapping or one or more per-model benchmark JSON files:
 
 ```bash
 modeldiet visualize results.json --output report.html
 modeldiet-report model-a.json model-b.json --experiment "Model comparison"
 ```
 
-The report embeds Plotly once and remains usable offline. In a notebook, call
-any plotting method as a cell expression or use `.show()`; in a script, use
-`.write_html("chart.html")` on the returned Plotly figure.
+The CLI writes the report and does not open a browser automatically. Reports
+can optionally include a combined JSON sidecar with `--include-json`.
 
-`compare_models(reference, comparison)` returns a table with both raw values,
-the absolute difference, and percent change relative to the reference. A
-percentage change is omitted when the reference is zero or either value is
-missing. `plot_normalized_comparison(metrics, baseline=...)` displays each
-value as an index where the baseline is 100; it does not replace the raw charts
-or indicate an overall winner.
+## Pairwise and normalized comparisons
 
-The CLI accepts existing JSON result files and does not rerun benchmarks:
+`compare_models(reference, comparison)` returns a figure with both values, the
+absolute difference, and percentage change relative to the reference. The
+percentage is omitted if the reference is zero or either value is unavailable.
+A positive change is not automatically an improvement: higher accuracy is
+generally favorable, while lower latency and memory use are generally
+favorable.
 
-```bash
-modeldiet visualize results/lr.json results/rf.json --output report.html
-```
+`plot_normalized_comparison(metrics, baseline=...)` sets the baseline to 100
+and displays other values as relative indices. It is not a performance score;
+raw values remain available in the individual charts and original results.
 
-It can also be called as `modeldiet-report results/lr.json results/rf.json`.
-The generated report organizes its interactive charts into Overview, Latency,
-Memory, Deployment, Trade-offs, and Details tabs to keep the main view compact.
-The tab bar supports keyboard navigation and the report embeds Plotly JavaScript for offline use. The current
-profile schema does not contain accuracy, loading time, peak RSS, precision,
-recall, F1, or independent repeated-run samples by default; corresponding
-charts or values appear only when those fields are supplied by the source
-result mapping. RSS snapshots and Python-traced allocation remain distinct.
+## Contributor structure
 
-The report has a persistent model selector. **One model** focuses all views on
-one selected model; **Compare 2–3 models** updates the same charts and metric
-readings for two or three selected models. The Metrics tab uses a consistent
-set of metric rows with plain-English descriptions, notes on whether higher or
-lower values are generally favorable, and links to supporting references.
-# Visualization module structure
+Result validation and metric aliases are centralized in
+`modeldiet.visualization.data`. `VisualizationBase` handles shared result
+validation, JSON loading, selection, and theme configuration. The public
+`ModelDietVisualizer` is the façade; chart builders live in `charts.py`, metric
+comparisons in `comparison.py`, and the standalone dashboard in `html_report.py`.
 
-The public `ModelDietVisualizer` follows a parent/child design. Shared result
-validation, JSON loading, model selection, and theme application live in
-`VisualizationBase` (`modeldiet.visualization.base`). The public visualizer
-inherits those common behaviors and owns the chart-specific methods exposed to
-users. The lower-level chart functions in `charts.py` remain reusable by the
-HTML report and direct imports.
-
-```text
-VisualizationBase
-└── ModelDietVisualizer
-    ├── plot_latency_comparison / plot_latency_distribution
-    ├── plot_memory_comparison / plot_python_memory
-    ├── plot_loading_time / plot_artifact_size
-    ├── plot_accuracy_latency / plot_normalized_comparison
-    └── compare_models / generate_report / show
-```
-
-When adding a chart, put measurement-specific construction in `charts.py`,
-expose a user-facing method on `ModelDietVisualizer`, and use `_select()` and
-`_style()` for the common behavior. Keep the returned Plotly figure interactive
-and represent missing measurements as unavailable rather than as zero. New
-shared behavior belongs in `VisualizationBase`, so chart methods do not each
-reimplement validation, selection, or theme handling.
+When adding a chart, use the shared data accessors and theme application, then
+expose the chart through `ModelDietVisualizer`. Keep missing values unavailable
+instead of substituting zero. The report currently compares models present in
+the supplied results; dataset uploads and public-dataset selection are future
+work.
