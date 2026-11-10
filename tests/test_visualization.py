@@ -97,13 +97,16 @@ def test_percentiles_and_missing_values_are_not_zero():
 
 
 @pytest.mark.skipif(not HAS_PLOTLY, reason="requires optional modeldiet[viz] extra")
-def test_distribution_requires_real_observations_and_uses_them():
+def test_distribution_uses_raw_samples_or_reported_percentile_fallback():
     from modeldiet.visualization import create_latency_distribution_chart
 
     result = _profile("A", 1, 2, 3)
     fig = create_latency_distribution_chart({"A": result})
-    assert not fig.data
-    assert "require retained raw observations" in fig.layout.annotations[0].text
+    assert list(fig.data[0].x) == [1, 2, 3]
+    assert fig.data[0].name == "Reported percentiles · A"
+    assert any(
+        "reported percentiles only" in item.text for item in fig.layout.annotations
+    )
     fig = create_latency_distribution_chart(
         {"A": {"latency_observations_ms": [3, 1, 2]}}
     )
@@ -147,8 +150,14 @@ def test_single_empty_and_html_report(tmp_path):
         {"Solo": _profile("Solo", 1, 2, 3)}, tmp_path / "report.html", include_json=True
     )
     content = result_path.read_text()
-    assert "Inference performance" in content and "Memory characteristics" in content
-    assert "Performance trade-offs" in content and "Benchmark metadata" in content
+    assert 'role="tablist"' in content and ">Latency</button>" in content
+    assert 'id="panel-memory"' in content and 'id="panel-tradeoffs"' in content
+    assert "Model details" in content
+    assert 'class="detail-toggle"' in content
+    assert 'id="single-model"' in content
+    assert 'value="compare"' in content
+    assert 'id="tab-metrics"' in content
+    assert content.count('class="metric-card"') == 11
     assert "Plotly.newPlot" in content
     assert 'src="https://cdn.plot.ly' not in content
     assert "python version" in content.lower()

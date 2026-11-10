@@ -120,8 +120,9 @@ def test_report_keeps_environment_metadata_per_model(tmp_path):
         experiment_name="<script>safe</script>",
     )
     content = report.read_text(encoding="utf-8")
-    assert "&lt;A&gt; Environment Python Version" in content
-    assert "B Environment Python Version" in content
+    assert "<h3>&lt;A&gt;</h3>" in content
+    assert content.count("Environment · Python Version") == 2
+    assert ">other</dd>" in content
     assert "&lt;script&gt;safe&lt;/script&gt;" in content
     assert "<script>safe</script>" not in content
 

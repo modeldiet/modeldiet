@@ -43,7 +43,7 @@ class ModelDietVisualizer(VisualizationBase):
     def plot_latency_distribution(
         self, models: Sequence[str] | None = None, chart_type: str = "ecdf"
     ) -> Any:
-        """Plot retained raw observations as ECDF, box, or violin; never infer samples."""
+        """Plot observed latency samples or measured percentile summaries."""
         selected = self._select(models)
         if chart_type == "ecdf":
             return charts.create_latency_distribution_chart(selected, theme=self.theme)

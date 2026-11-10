@@ -44,7 +44,10 @@ mapping or a single benchmark-worker JSON record. Use `theme="dark"` in the
 constructor for dark figures and reports. `plot_latency_comparison()` accepts
 `p50_ms`, `p95_ms`, and `p99_ms`. `plot_latency_distribution()` accepts
 `ecdf`, `box`, or `violin`, and renders observations only if the results
-actually include `latency_observations_ms`.
+actually include `latency_observations_ms`. The ECDF view falls back to a
+clearly labeled line through supplied P50/P95/P99 points when only summaries
+exist; it does not invent raw observations. Box and violin charts require raw
+observations and explain when they are unavailable.
 
 `visualizer.available_metrics` maps public metric names to the models that
 provide them. Missing or non-finite measurements remain unavailable in charts;
@@ -78,11 +81,19 @@ modeldiet visualize results/lr.json results/rf.json --output report.html
 ```
 
 It can also be called as `modeldiet-report results/lr.json results/rf.json`.
-The generated report embeds Plotly JavaScript for offline use. The current
+The generated report organizes its interactive charts into Overview, Latency,
+Memory, Deployment, Trade-offs, and Details tabs to keep the main view compact.
+The tab bar supports keyboard navigation and the report embeds Plotly JavaScript for offline use. The current
 profile schema does not contain accuracy, loading time, peak RSS, precision,
 recall, F1, or independent repeated-run samples by default; corresponding
 charts or values appear only when those fields are supplied by the source
 result mapping. RSS snapshots and Python-traced allocation remain distinct.
+
+The report has a persistent model selector. **One model** focuses all views on
+one selected model; **Compare 2–3 models** updates the same charts and metric
+readings for two or three selected models. The Metrics tab uses a consistent
+set of metric rows with plain-English descriptions, notes on whether higher or
+lower values are generally favorable, and links to supporting references.
 # Visualization module structure
 
 The public `ModelDietVisualizer` follows a parent/child design. Shared result

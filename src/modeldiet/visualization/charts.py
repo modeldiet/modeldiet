@@ -139,28 +139,53 @@ def create_latency_comparison_chart(
 
 
 def create_latency_distribution_chart(results: Results, *, theme: str = "light") -> Any:
-    """Show an ECDF only when original per-observation latency samples exist."""
+    """Plot raw latency ECDFs, using reported percentiles when samples are absent."""
     go = _go()
     fig = go.Figure()
     found = False
+    summaries = 0
     for name, record in results.items():
         values = sorted(latency_observations(record))
-        if not values:
-            continue
-        found = True
-        fig.add_trace(
-            go.Scatter(
-                x=values,
-                y=[(i + 1) / len(values) for i in range(len(values))],
-                mode="lines",
-                name=name,
-                line={"color": ACCENTS[len(fig.data) % len(ACCENTS)]},
-                hovertemplate="Latency: %{x:.6g} ms<br>Cumulative fraction: %{y:.1%}<extra>%{fullData.name}</extra>",
+        color = ACCENTS[len(fig.data) % len(ACCENTS)]
+        if values:
+            found = True
+            fig.add_trace(
+                go.Scatter(
+                    x=values,
+                    y=[(i + 1) / len(values) for i in range(len(values))],
+                    mode="lines",
+                    name=f"Observed ECDF · {name}",
+                    line={"color": color},
+                    hovertemplate="Latency: %{x:.6g} ms<br>Cumulative fraction: %{y:.1%}<extra>%{fullData.name}</extra>",
+                )
             )
-        )
+            continue
+
+        # Keep a visible latency-distribution comparison even when the source
+        # retained percentiles only. These are reported points, not synthesized
+        # samples or an estimated ECDF.
+        quantiles = [
+            (q, metric_number(record, "latency", key))
+            for q, key in ((0.50, "p50_ms"), (0.95, "p95_ms"), (0.99, "p99_ms"))
+        ]
+        quantiles = [(q, value) for q, value in quantiles if value is not None]
+        if quantiles:
+            found = True
+            summaries += 1
+            fig.add_trace(
+                go.Scatter(
+                    x=[value for _, value in quantiles],
+                    y=[q for q, _ in quantiles],
+                    mode="lines+markers",
+                    name=f"Reported percentiles · {name}",
+                    line={"color": color, "dash": "dash"},
+                    marker={"size": 8},
+                    hovertemplate="Reported latency: %{x:.6g} ms<br>Percentile: %{y:.0%}<extra>%{fullData.name}</extra>",
+                )
+            )
     if not found:
         fig.add_annotation(
-            text="Latency distributions require retained raw observations. This result contains only summary percentiles.",
+            text="Latency distribution needs recorded samples or at least one reported latency percentile.",
             showarrow=False,
             x=0.5,
             y=0.5,
@@ -168,12 +193,19 @@ def create_latency_distribution_chart(results: Results, *, theme: str = "light")
             yref="paper",
             align="center",
         )
-    apply_theme(
-        fig,
-        "Latency distribution",
-        "ECDF of recorded per-observation latency · milliseconds",
-        theme,
-    )
+    subtitle = "Recorded observations where available; dashed lines connect reported percentiles otherwise"
+    apply_theme(fig, "Latency distribution", subtitle, theme)
+    if summaries:
+        fig.add_annotation(
+            text="Dashed lines show reported percentiles only; they do not represent raw samples.",
+            showarrow=False,
+            x=1,
+            y=1.12,
+            xref="paper",
+            yref="paper",
+            xanchor="right",
+            font={"size": 10},
+        )
     fig.update_xaxes(title="Latency (ms)")
     fig.update_yaxes(title="Cumulative fraction", tickformat=".0%", range=[0, 1])
     return fig
