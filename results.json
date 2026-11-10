@@ -1,0 +1,149 @@
+{
+  "Logistic Regression": {
+    "accuracy": 0.9824561403508771,
+    "loading_time": 3.506600114633329e-05,
+    "measurement_details": {
+      "latency": {
+        "mean_ms": 0.07190464914361783,
+        "p50_ms": 0.0700565014994936,
+        "p90_ms": 0.07593269801873248,
+        "p95_ms": 0.07817070181772579,
+        "p99_ms": 0.10094548855704491,
+        "sample_count": 114
+      },
+      "process_memory": {
+        "rss_before_inference_mb": 175.46875,
+        "rss_after_inference_mb": 175.46875,
+        "rss_delta_mb": 0.0
+      },
+      "allocation": {
+        "traced_peak_inference_allocation_mb": 0.002216339111328125
+      },
+      "serialization": {
+        "serialized_model_size_mb": 0.0008649826049804688,
+        "serialization_format": "pickle"
+      }
+    },
+    "environment": {
+      "python_version": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+      "processor": "",
+      "cpu_count_logical": 12,
+      "cpu_count_physical": 6,
+      "total_ram_gb": 14.38,
+      "cpu_frequency_mhz": 4416.770166666666,
+      "numpy_version": "2.5.4",
+      "sklearn_version": "1.9.1",
+      "xgboost_version": "3.4.1",
+      "thread_environment": {
+        "OMP_NUM_THREADS": null,
+        "MKL_NUM_THREADS": null,
+        "OPENBLAS_NUM_THREADS": null,
+        "NUMEXPR_NUM_THREADS": null
+      }
+    },
+    "sample_count": 114,
+    "model_configuration": {
+      "class": "LogisticRegression",
+      "module": "sklearn.linear_model._logistic"
+    }
+  },
+  "Random Forest": {
+    "accuracy": 0.956140350877193,
+    "loading_time": 0.0009480359985900577,
+    "measurement_details": {
+      "latency": {
+        "mean_ms": 2.2367117020813136,
+        "p50_ms": 2.0546624982671347,
+        "p90_ms": 2.5624837002396816,
+        "p95_ms": 3.26906215159397,
+        "p99_ms": 3.7947685011022263,
+        "sample_count": 114
+      },
+      "process_memory": {
+        "rss_before_inference_mb": 177.73046875,
+        "rss_after_inference_mb": 178.61328125,
+        "rss_delta_mb": 0.8828125
+      },
+      "allocation": {
+        "traced_peak_inference_allocation_mb": 0.865330696105957
+      },
+      "serialization": {
+        "serialized_model_size_mb": 0.23870372772216797,
+        "serialization_format": "pickle"
+      }
+    },
+    "environment": {
+      "python_version": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+      "processor": "",
+      "cpu_count_logical": 12,
+      "cpu_count_physical": 6,
+      "total_ram_gb": 14.38,
+      "cpu_frequency_mhz": 3130.1065833333337,
+      "numpy_version": "2.5.4",
+      "sklearn_version": "1.9.1",
+      "xgboost_version": "3.4.1",
+      "thread_environment": {
+        "OMP_NUM_THREADS": null,
+        "MKL_NUM_THREADS": null,
+        "OPENBLAS_NUM_THREADS": null,
+        "NUMEXPR_NUM_THREADS": null
+      }
+    },
+    "sample_count": 114,
+    "model_configuration": {
+      "class": "RandomForestClassifier",
+      "module": "sklearn.ensemble._forest"
+    }
+  },
+  "Gradient Boosting": {
+    "accuracy": 0.956140350877193,
+    "loading_time": 0.0013534850004361942,
+    "measurement_details": {
+      "latency": {
+        "mean_ms": 0.10824049984461326,
+        "p50_ms": 0.10279999696649611,
+        "p90_ms": 0.12322980001044925,
+        "p95_ms": 0.13757369724771706,
+        "p99_ms": 0.154775070186588,
+        "sample_count": 114
+      },
+      "process_memory": {
+        "rss_before_inference_mb": 180.5546875,
+        "rss_after_inference_mb": 180.5546875,
+        "rss_delta_mb": 0.0
+      },
+      "allocation": {
+        "traced_peak_inference_allocation_mb": 0.0024242401123046875
+      },
+      "serialization": {
+        "serialized_model_size_mb": 0.12685489654541016,
+        "serialization_format": "pickle"
+      }
+    },
+    "environment": {
+      "python_version": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+      "processor": "",
+      "cpu_count_logical": 12,
+      "cpu_count_physical": 6,
+      "total_ram_gb": 14.38,
+      "cpu_frequency_mhz": 3028.491583333333,
+      "numpy_version": "2.5.4",
+      "sklearn_version": "1.9.1",
+      "xgboost_version": "3.4.1",
+      "thread_environment": {
+        "OMP_NUM_THREADS": null,
+        "MKL_NUM_THREADS": null,
+        "OPENBLAS_NUM_THREADS": null,
+        "NUMEXPR_NUM_THREADS": null
+      }
+    },
+    "sample_count": 114,
+    "model_configuration": {
+      "class": "GradientBoostingClassifier",
+      "module": "sklearn.ensemble._gb"
+    }
+  }
+}

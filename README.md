@@ -32,6 +32,7 @@ The optional benchmark tools have separate extras:
 | `python -m pip install "modeldiet[benchmark]"` | pandas and scikit-learn | Logistic Regression and Random Forest benchmark runs |
 | `python -m pip install "modeldiet[benchmark-xgboost]"` | pandas, scikit-learn, and XGBoost | XGBoost benchmark runs |
 | `python -m pip install "modeldiet[demo]"` | pandas, scikit-learn, and XGBoost | Demo quickstart and all benchmark types |
+| `python -m pip install "modeldiet[viz]"` | Plotly | Interactive standalone HTML reports |
 
 For development from a source checkout, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -116,6 +117,44 @@ print(metric.definition.identifier, metric.definition.unit)
 ```
 
 The result also records the model class and module, input type, sample count, feature count, and schema version. Environment metadata is opt-in through `include_environment=True`. The detailed [application guide](https://modeldiet.github.io/modeldiet/application/) covers error handling, exports, and custom measurement strategies.
+
+## Interactive HTML reports
+
+Install the optional visualization extra. The core profiler and `import modeldiet` do not load Plotly:
+
+```bash
+python -m pip install "modeldiet[viz]"
+```
+
+The current report command consumes existing benchmark JSON files, so it does not rerun model execution. For example, after producing results with the demo benchmark workflow:
+
+```bash
+modeldiet-report results/lr.json results/rf.json --experiment "Breast cancer test set" --output report.html --include-json
+```
+
+The report is a standalone offline HTML file with interactive latency percentile, process RSS, Python-traced allocation, loading time, serialized size, and accuracy-versus-P99 charts. It includes a metric only when supplied by the source results. The core `ProfileResult` currently retains percentile summaries rather than raw latency observations, so its latency distribution panel explains that samples are unavailable instead of deriving a fake distribution. Benchmark JSON may supply actual raw observations under `latency_observations_ms` to enable the ECDF. Accuracy and loading-time comparisons are included when the benchmark JSON contains those observed values.
+
+P50, P95, and P99 are the observed latency percentiles: half, 95%, and 99% of timed predictions completed at or below that duration. Process RSS values describe whole-process resident memory snapshots, while Python-traced allocations cover memory tracked by `tracemalloc` and exclude native allocations. They are separate measurements and should not be treated as equivalent. The accuracy-versus-P99 chart shows a trade-off between predictive performance and single-row tail latency; it does not assign a composite score or select an overall winner.
+
+`ProfileResult.to_json()` continues to write the existing per-model JSON format. The report CLI can optionally also write a combined `results.json` beside the HTML output. The current repository has no general-purpose `modeldiet profile` CLI; use the Python `profile()` API for arbitrary fitted models and pass its results to `write_html_report()` when comparing them:
+
+```python
+from modeldiet.visualization import write_html_report
+
+write_html_report({"Classifier A": result_a, "Classifier B": result_b}, "report.html")
+```
+
+For notebook figures and pairwise or normalized comparisons, see the
+[interactive visualization guide](docs/visualization.md) and the public
+`ModelDietVisualizer` API. It returns Plotly figures for use with `.show()` or
+Plotly's static and HTML export methods.
+
+For a guided newcomer experience, install the demo dependencies with
+`python -m pip install -e ".[demo]"` and run `modeldiet-demo`. Choose a built-in dataset and one or more example models;
+ModelDiet trains and profiles them locally, then opens one native dashboard
+window without launching a browser. The dashboard includes explanations of what the metrics
+measure and their limits. The demo uses small scikit-learn datasets and is
+intended for exploration, not production benchmarking.
 
 ## Additional benchmark workflow
 
