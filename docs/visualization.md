@@ -46,6 +46,24 @@ constructor for dark figures and reports. `plot_latency_comparison()` accepts
 `ecdf`, `box`, or `violin`, and renders observations only if the results
 actually include `latency_observations_ms`.
 
+`visualizer.available_metrics` maps public metric names to the models that
+provide them. Missing or non-finite measurements remain unavailable in charts;
+they are never replaced with zero. For example, a model without P99 latency is
+left out of that plotted bar and an explanatory note identifies the missing
+series. Results may be `ProfileResult` instances or supported benchmark JSON
+mappings, including nested `measurement_details` and legacy flat fields.
+
+For a CLI report, pass one or more per-model JSON files or a combined mapping:
+
+```bash
+modeldiet visualize results.json --output report.html
+modeldiet-report model-a.json model-b.json --experiment "Model comparison"
+```
+
+The report embeds Plotly once and remains usable offline. In a notebook, call
+any plotting method as a cell expression or use `.show()`; in a script, use
+`.write_html("chart.html")` on the returned Plotly figure.
+
 `compare_models(reference, comparison)` returns a table with both raw values,
 the absolute difference, and percent change relative to the reference. A
 percentage change is omitted when the reference is zero or either value is

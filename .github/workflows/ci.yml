@@ -59,10 +59,27 @@ jobs:
           cache: pip
 
       - name: Install test and demo dependencies
-        run: python -m pip install -e ".[test,demo]"
+        run: python -m pip install -e ".[test,demo,viz]"
 
       - name: Run tests
         run: python -m pytest -v
+
+  core-only-visualization:
+    name: Core-only visualization optional dependency
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+      - name: Install without Plotly
+        run: python -m pip install -e ".[test]"
+      - name: Verify optional dependency boundary
+        run: >-
+          python -m pytest -v tests/test_visualization.py
+          -k "core_package_and_visualization_namespace or visualization_error_explains_install_extra"
 
   coverage:
     name: Coverage (Python 3.14)
@@ -77,7 +94,7 @@ jobs:
           cache: pip
 
       - name: Install test and demo dependencies
-        run: python -m pip install -e ".[test,demo]"
+        run: python -m pip install -e ".[test,demo,viz]"
 
       - name: Run tests with line and branch coverage
         run: >-
@@ -125,7 +142,7 @@ jobs:
           /tmp/modeldiet-wheel/bin/python -m pip install dist/*.whl
           cd /tmp
           /tmp/modeldiet-wheel/bin/python -c \
-            "from modeldiet import profile, ProfileResult; print('Wheel import successful')"
+            "import sys, modeldiet.visualization; from modeldiet import profile, ProfileResult; assert 'plotly' not in sys.modules; print('Wheel import successful')"
 
       - name: Test source distribution installation
         run: |
@@ -134,4 +151,4 @@ jobs:
             "$GITHUB_WORKSPACE"/dist/*.tar.gz
           cd /tmp
           /tmp/modeldiet-sdist/bin/python -c \
-            "from modeldiet import profile, ProfileResult; print('Source distribution import successful')"
+            "import sys, modeldiet.visualization; from modeldiet import profile, ProfileResult; assert 'plotly' not in sys.modules; print('Source distribution import successful')"

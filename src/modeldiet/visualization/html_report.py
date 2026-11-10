@@ -12,8 +12,14 @@ from typing import Any
 
 from modeldiet.result import ProfileResult
 from modeldiet.visualization import charts
-from modeldiet.visualization.charts import Results, _metric, _number
-from modeldiet.visualization.theme import BACKGROUND, TEXT
+from modeldiet.visualization.data import (
+    Results,
+    accuracy_value,
+    metric_number,
+    metric_value,
+    validate_results,
+)
+from modeldiet.visualization.theme import THEMES
 
 
 def _safe_json(value: Any) -> Any:
@@ -32,25 +38,25 @@ def _cards(results: Results) -> str:
     metrics = [
         (
             "Best test accuracy",
-            lambda r: _number(r.get("accuracy")) if isinstance(r, Mapping) else None,
+            accuracy_value,
             True,
             "%",
         ),
         (
             "Lowest P99 latency",
-            lambda r: _number(_metric(r, "latency", "p99_ms")),
+            lambda r: metric_number(r, "latency", "p99_ms"),
             False,
             " ms",
         ),
         (
             "Lowest process RSS",
-            lambda r: _number(_metric(r, "process_rss", "rss_after_inference_mb")),
+            lambda r: metric_number(r, "process_rss", "rss_after_inference_mb"),
             False,
             " MiB",
         ),
         (
             "Smallest serialized size",
-            lambda r: _number(_metric(r, "pickle_size", "serialized_model_size_mb")),
+            lambda r: metric_number(r, "pickle_size", "serialized_model_size_mb"),
             False,
             " MiB",
         ),
@@ -76,24 +82,28 @@ def _cards(results: Results) -> str:
 
 
 def _metadata(results: Results) -> str:
-    collected: dict[str, Any] = {}
-    for record in results.values():
-        if isinstance(record, ProfileResult) and record.environment:
-            collected.update(record.environment)
-        elif isinstance(record, Mapping):
-            env = record.get("environment")
-            if isinstance(env, Mapping):
-                collected.update(env)
-    metadata = dict(collected)
+    metadata: dict[str, Any] = {}
     for name, record in results.items():
         if isinstance(record, ProfileResult):
-            count = _metric(record, "latency", "sample_count")
+            if record.environment:
+                metadata.update(
+                    {
+                        f"{name} environment {key}": value
+                        for key, value in record.environment.items()
+                    }
+                )
+            count = metric_value(record, "latency", "sample_count")
             if count is not None:
                 metadata[f"{name} inference observations"] = count
             metadata[f"{name} model configuration"] = (
                 f"{record.model_module}.{record.model_class}"
             )
         elif isinstance(record, Mapping):
+            env = record.get("environment")
+            if isinstance(env, Mapping):
+                metadata.update(
+                    {f"{name} environment {key}": value for key, value in env.items()}
+                )
             for key in (
                 "sample_count",
                 "warmup_count",
@@ -135,6 +145,7 @@ def write_html_report(
     """
     if not isinstance(results, Mapping):
         raise TypeError("results must map model names to existing profiling results")
+    results = validate_results(results)
     if theme not in {"light", "dark"}:
         raise ValueError("theme must be 'light' or 'dark'")
     path = Path(output_path)
@@ -150,56 +161,56 @@ def write_html_report(
             [
                 (
                     "Latency percentiles",
-                    charts.create_latency_percentile_chart(results),
+                    charts.create_latency_percentile_chart(results, theme=theme),
                 ),
                 (
                     "Latency distribution",
-                    charts.create_latency_distribution_chart(results),
+                    charts.create_latency_distribution_chart(results, theme=theme),
                 ),
             ],
         ),
         (
             "Memory characteristics",
             [
-                ("Process RSS", charts.create_rss_comparison_chart(results)),
-                ("Python-traced memory", charts.create_python_memory_chart(results)),
+                (
+                    "Process RSS",
+                    charts.create_rss_comparison_chart(results, theme=theme),
+                ),
+                (
+                    "Python-traced memory",
+                    charts.create_python_memory_chart(results, theme=theme),
+                ),
             ],
         ),
         (
             "Deployment characteristics",
             [
-                ("Model loading time", charts.create_loading_time_chart(results)),
-                ("Serialized model size", charts.create_artifact_size_chart(results)),
+                (
+                    "Model loading time",
+                    charts.create_loading_time_chart(results, theme=theme),
+                ),
+                (
+                    "Serialized model size",
+                    charts.create_artifact_size_chart(results, theme=theme),
+                ),
             ],
         ),
         (
             "Performance trade-offs",
-            [("Accuracy and latency", charts.create_accuracy_latency_chart(results))],
+            [
+                (
+                    "Accuracy and latency",
+                    charts.create_accuracy_latency_chart(results, theme=theme),
+                )
+            ],
         ),
     ]
     plot_blocks: list[str] = []
     include_plotly = True
+    colors = THEMES[theme]
     for section, section_figures in figures:
         blocks = []
         for title, figure in section_figures:
-            if theme == "dark":
-                figure.update_layout(
-                    paper_bgcolor="#111827",
-                    plot_bgcolor="#111827",
-                    font_color="#e5e7eb",
-                )
-                figure.update_xaxes(
-                    gridcolor="#374151",
-                    linecolor="#4b5563",
-                    title_font_color="#e5e7eb",
-                    tickfont_color="#cbd5e1",
-                )
-                figure.update_yaxes(
-                    gridcolor="#374151",
-                    linecolor="#4b5563",
-                    title_font_color="#e5e7eb",
-                    tickfont_color="#cbd5e1",
-                )
             rendered = figure.to_html(
                 full_html=False,
                 include_plotlyjs=include_plotly,
@@ -219,7 +230,7 @@ def write_html_report(
     document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)} · ModelDiet</title><style>
-:root{{--bg:{"#111827" if theme == "dark" else BACKGROUND};--surface:{"#1f2937" if theme == "dark" else "#fff"};--text:{"#e5e7eb" if theme == "dark" else TEXT};--muted:{"#9ca3af" if theme == "dark" else "#5b6875"};--border:{"#374151" if theme == "dark" else "#e4e9ee"};--accent:#60a5fa}}
+:root{{--bg:{colors["background"]};--surface:{colors["surface"]};--text:{colors["text"]};--muted:{colors["muted"]};--border:{colors["grid"]};--accent:#60a5fa}}
 *{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,"Segoe UI",sans-serif}}
 main{{max-width:1240px;margin:auto;padding:36px 28px 64px}}header{{padding:26px 30px;background:var(--surface);border:1px solid var(--border);border-radius:12px}}
 .brand{{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}}h1{{margin:8px 0 4px;font-size:30px}}.sub{{color:var(--muted)}}section{{margin-top:30px}}h2{{font-size:20px;margin:0 0 14px}}h3{{font-size:15px;margin:0;padding:15px 18px 0}}

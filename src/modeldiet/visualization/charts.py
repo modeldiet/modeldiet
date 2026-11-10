@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any
 
-from modeldiet.result import ProfileResult
+from modeldiet.visualization.data import (
+    Results,
+    accuracy_value,
+    latency_observations,
+    metric_number,
+)
 from modeldiet.visualization.theme import ACCENTS, apply_theme
-
-Results = Mapping[str, ProfileResult | Mapping[str, Any]]
 
 
 def _go() -> Any:
@@ -25,51 +27,6 @@ def _go() -> Any:
     return go
 
 
-def _metric(
-    record: ProfileResult | Mapping[str, Any], measurement: str, key: str
-) -> Any:
-    if isinstance(record, ProfileResult):
-        result = record.measurements.get(measurement)
-        value = result.metrics.get(key) if result else None
-        return value.value if value is not None else None
-    aliases = {
-        "latency": "latency",
-        "process_rss": "process_memory",
-        "python_traced_allocation": "allocation",
-        "pickle_size": "serialization",
-    }
-    nested = record.get("measurement_details", {}).get(
-        aliases.get(measurement, measurement), {}
-    )
-    if key in nested:
-        return nested[key]
-    flat_aliases = {
-        ("latency", "mean_ms"): "mean_inference_latency",
-        ("latency", "p50_ms"): "p50_latency",
-        ("latency", "p95_ms"): "p95_latency",
-        ("latency", "p99_ms"): "p99_latency",
-        ("latency", "sample_count"): "sample_count",
-        ("process_rss", "rss_before_inference_mb"): "rss_before_inference_mb",
-        ("process_rss", "rss_after_inference_mb"): "rss_after_inference_mb",
-        ("process_rss", "rss_delta_mb"): "rss_delta_mb",
-        (
-            "python_traced_allocation",
-            "traced_peak_inference_allocation_mb",
-        ): "traced_peak_inference_allocation_mb",
-        ("pickle_size", "serialized_model_size_mb"): "serialized_model_size",
-    }
-    if measurement == "latency" and key == "sample_count":
-        return record.get("sample_count")
-    return record.get(flat_aliases.get((measurement, key), key))
-
-
-def _number(value: Any) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    number = float(value)
-    return number if math.isfinite(number) else None
-
-
 def _models(results: Results) -> list[str]:
     return [str(name) for name in results]
 
@@ -81,12 +38,16 @@ def _bar(
     specs: Sequence[tuple[str, str, str]],
     *,
     horizontal: bool = False,
+    theme: str = "light",
 ) -> Any:
     go = _go()
     names = _models(results)
     fig = go.Figure()
+    missing = []
     for index, (label, measurement, key) in enumerate(specs):
-        values = [_number(_metric(results[name], measurement, key)) for name in results]
+        values = [metric_number(results[name], measurement, key) for name in results]
+        if not any(value is not None for value in values):
+            missing.append(label)
         fig.add_trace(
             go.Bar(
                 name=label,
@@ -109,12 +70,23 @@ def _bar(
             xref="paper",
             yref="paper",
         )
+    elif missing:
+        fig.add_annotation(
+            text=f"Unavailable measurement(s): {', '.join(missing)}",
+            showarrow=False,
+            x=1,
+            y=1.12,
+            xref="paper",
+            yref="paper",
+            xanchor="right",
+            font={"size": 11},
+        )
     fig.update_layout(barmode="group")
-    apply_theme(fig, title, subtitle)
+    apply_theme(fig, title, subtitle, theme)
     return fig
 
 
-def create_latency_percentile_chart(results: Results) -> Any:
+def create_latency_percentile_chart(results: Results, *, theme: str = "light") -> Any:
     """Compare measured P50, P95, and P99 latency in milliseconds."""
     fig = _bar(
         results,
@@ -125,28 +97,54 @@ def create_latency_percentile_chart(results: Results) -> Any:
             ("P95", "latency", "p95_ms"),
             ("P99", "latency", "p99_ms"),
         ],
+        theme=theme,
     )
     fig.update_yaxes(title="Latency (ms)")
     fig.update_xaxes(title="Model")
     return fig
 
 
-def create_latency_distribution_chart(results: Results) -> Any:
+def create_latency_comparison_chart(
+    results: Results, percentiles: Sequence[str], *, theme: str = "light"
+) -> Any:
+    """Compare selected latency percentiles, or mean latency, by model."""
+    available = {
+        "mean_ms": ("Mean", "mean_ms"),
+        "p50_ms": ("P50", "p50_ms"),
+        "p95_ms": ("P95", "p95_ms"),
+        "p99_ms": ("P99", "p99_ms"),
+    }
+    if not percentiles or any(item not in available for item in percentiles):
+        raise ValueError(
+            "percentiles must contain one or more of: mean_ms, p50_ms, p95_ms, p99_ms"
+        )
+    specs = [
+        (available[item][0], "latency", available[item][1]) for item in percentiles
+    ]
+    title = (
+        "Inference latency by percentile"
+        if any(item.startswith("p") for item in percentiles)
+        else "Mean inference latency"
+    )
+    fig = _bar(
+        results,
+        title,
+        "Single-row prediction latency · milliseconds",
+        specs,
+        theme=theme,
+    )
+    fig.update_yaxes(title="Latency (ms)")
+    fig.update_xaxes(title="Model")
+    return fig
+
+
+def create_latency_distribution_chart(results: Results, *, theme: str = "light") -> Any:
     """Show an ECDF only when original per-observation latency samples exist."""
     go = _go()
     fig = go.Figure()
     found = False
     for name, record in results.items():
-        raw = (
-            record.get("latency_observations_ms")
-            if isinstance(record, Mapping)
-            else None
-        )
-        if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
-            continue
-        values = sorted(
-            number for value in raw if (number := _number(value)) is not None
-        )
+        values = sorted(latency_observations(record))
         if not values:
             continue
         found = True
@@ -174,13 +172,135 @@ def create_latency_distribution_chart(results: Results) -> Any:
         fig,
         "Latency distribution",
         "ECDF of recorded per-observation latency · milliseconds",
+        theme,
     )
     fig.update_xaxes(title="Latency (ms)")
     fig.update_yaxes(title="Cumulative fraction", tickformat=".0%", range=[0, 1])
     return fig
 
 
-def create_rss_comparison_chart(results: Results) -> Any:
+def create_latency_shape_chart(
+    results: Results, chart_type: str, *, theme: str = "light"
+) -> Any:
+    """Create a box or violin latency chart from retained raw observations."""
+    if chart_type not in {"box", "violin"}:
+        raise ValueError("chart_type must be 'box', 'violin', or 'ecdf'")
+    go = _go()
+    figure = go.Figure()
+    for name, record in results.items():
+        values = latency_observations(record)
+        if not values:
+            continue
+        if chart_type == "violin":
+            figure.add_trace(
+                go.Violin(name=name, y=values, box_visible=True, meanline_visible=True)
+            )
+        else:
+            figure.add_trace(go.Box(name=name, y=values, boxpoints="outliers"))
+    if not figure.data:
+        figure.add_annotation(
+            text="Distribution plots require retained raw latency observations.",
+            showarrow=False,
+        )
+    apply_theme(
+        figure,
+        f"Latency {chart_type} plot",
+        "Retained per-observation latency · milliseconds",
+        theme,
+    )
+    figure.update_yaxes(title="Latency (ms)")
+    return figure
+
+
+def create_normalized_comparison_chart(
+    results: Results, metrics: Sequence[str], baseline: str, *, theme: str = "light"
+) -> Any:
+    """Create a metric index chart where the selected baseline equals 100."""
+    from modeldiet.visualization.comparison import METRICS, value_for
+
+    if baseline not in results:
+        raise ValueError("baseline must be included in selected models")
+    if not metrics:
+        raise ValueError("metrics must contain at least one supported metric")
+    unknown = [metric for metric in metrics if metric not in METRICS]
+    if unknown:
+        raise ValueError(f"Unknown metric(s): {', '.join(unknown)}")
+    go = _go()
+    figure = go.Figure()
+    unavailable = []
+    for metric in metrics:
+        base_value = value_for(results[baseline], metric)
+        if base_value in (None, 0):
+            unavailable.append(metric)
+        values = []
+        for record in results.values():
+            current = value_for(record, metric)
+            values.append(
+                current / base_value * 100
+                if current is not None and base_value not in (None, 0)
+                else None
+            )
+        figure.add_trace(go.Bar(name=METRICS[metric][2], x=list(results), y=values))
+    figure.update_layout(barmode="group")
+    figure.add_annotation(
+        text=f"Relative index only · baseline {baseline} = 100",
+        x=0,
+        y=-0.22,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+    )
+    if unavailable:
+        figure.add_annotation(
+            text=f"Cannot index metric(s): baseline value is missing or zero ({', '.join(unavailable)})",
+            x=1,
+            y=1.12,
+            xref="paper",
+            yref="paper",
+            xanchor="right",
+            showarrow=False,
+        )
+    apply_theme(figure, "Baseline-relative comparison", theme=theme)
+    figure.update_yaxes(title=f"Index (baseline {baseline} = 100)")
+    figure.update_xaxes(title="Model")
+    return figure
+
+
+def create_pairwise_comparison_chart(
+    results: Results, model_a: str, model_b: str, *, theme: str = "light"
+) -> Any:
+    """Create a table comparing two models across the supported metrics."""
+    from modeldiet.visualization.comparison import pairwise_rows
+
+    go = _go()
+    rows = pairwise_rows(results, model_a, model_b)
+    table = go.Table(
+        header={
+            "values": [
+                "Metric",
+                f"Reference: {model_a}",
+                f"Comparison: {model_b}",
+                "Difference (B − A)",
+                "% change vs A",
+            ]
+        },
+        cells={
+            "values": [
+                [row["label"] for row in rows],
+                [row["reference"] for row in rows],
+                [row["comparison"] for row in rows],
+                [row["difference"] for row in rows],
+                [row["percent_change"] for row in rows],
+            ]
+        },
+    )
+    figure = go.Figure(data=[table])
+    apply_theme(figure, "Pairwise model comparison", theme=theme)
+    figure.update_layout(height=560)
+    return figure
+
+
+def create_rss_comparison_chart(results: Results, *, theme: str = "light") -> Any:
     """Compare process-wide RSS endpoint values and the separately labelled delta."""
     fig = _bar(
         results,
@@ -191,13 +311,14 @@ def create_rss_comparison_chart(results: Results) -> Any:
             ("After inference", "process_rss", "rss_after_inference_mb"),
             ("RSS change", "process_rss", "rss_delta_mb"),
         ],
+        theme=theme,
     )
     fig.update_yaxes(title="RSS (MiB)")
     fig.update_xaxes(title="Model")
     return fig
 
 
-def create_python_memory_chart(results: Results) -> Any:
+def create_python_memory_chart(results: Results, *, theme: str = "light") -> Any:
     """Compare Python-traced peak inference allocations in MiB."""
     fig = _bar(
         results,
@@ -210,13 +331,14 @@ def create_python_memory_chart(results: Results) -> Any:
                 "traced_peak_inference_allocation_mb",
             ),
         ],
+        theme=theme,
     )
     fig.update_yaxes(title="Python-traced allocation (MiB)")
     fig.update_xaxes(title="Model")
     return fig
 
 
-def create_loading_time_chart(results: Results) -> Any:
+def create_loading_time_chart(results: Results, *, theme: str = "light") -> Any:
     """Compare measured model deserialization time in seconds."""
     fig = _bar(
         results,
@@ -224,13 +346,14 @@ def create_loading_time_chart(results: Results) -> Any:
         "Measured deserialization duration · seconds",
         [("Loading time", "", "loading_time")],
         horizontal=True,
+        theme=theme,
     )
     fig.update_xaxes(title="Loading time (seconds)")
     fig.update_yaxes(title="Model", autorange="reversed")
     return fig
 
 
-def create_artifact_size_chart(results: Results) -> Any:
+def create_artifact_size_chart(results: Results, *, theme: str = "light") -> Any:
     """Compare serialized model artifact representations in MiB."""
     fig = _bar(
         results,
@@ -238,25 +361,24 @@ def create_artifact_size_chart(results: Results) -> Any:
         "Python pickle representation · MiB; not in-memory size",
         [("Serialized size", "pickle_size", "serialized_model_size_mb")],
         horizontal=True,
+        theme=theme,
     )
     fig.update_xaxes(title="Serialized size (MiB)")
     fig.update_yaxes(title="Model", autorange="reversed")
     return fig
 
 
-def create_accuracy_latency_chart(results: Results) -> Any:
+def create_accuracy_latency_chart(results: Results, *, theme: str = "light") -> Any:
     """Plot observed test accuracy against P99 latency when both are available."""
     go = _go()
     fig = go.Figure()
     for index, (name, record) in enumerate(results.items()):
-        accuracy = (
-            _number(record.get("accuracy")) if isinstance(record, Mapping) else None
-        )
-        latency = _number(_metric(record, "latency", "p99_ms"))
+        accuracy = accuracy_value(record)
+        latency = metric_number(record, "latency", "p99_ms")
         if accuracy is None or latency is None:
             continue
-        rss = _number(_metric(record, "process_rss", "rss_after_inference_mb"))
-        size = _number(_metric(record, "pickle_size", "serialized_model_size_mb"))
+        rss = metric_number(record, "process_rss", "rss_after_inference_mb")
+        size = metric_number(record, "pickle_size", "serialized_model_size_mb")
         fig.add_trace(
             go.Scatter(
                 x=[accuracy],
@@ -283,6 +405,7 @@ def create_accuracy_latency_chart(results: Results) -> Any:
         fig,
         "Predictive performance vs inference cost",
         "Each point is a model with both observed test accuracy and P99 latency",
+        theme,
     )
     fig.update_xaxes(title="Test accuracy", tickformat=".0%")
     fig.update_yaxes(title="P99 inference latency (ms)")

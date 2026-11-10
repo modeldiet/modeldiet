@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from modeldiet.visualization.html_report import write_html_report
+from modeldiet.visualization.api import ModelDietVisualizer
 
 
 def main() -> None:
@@ -44,16 +44,21 @@ def main() -> None:
             parser.error(f"cannot read result file {result_path}: {exc}")
         if not isinstance(payload, dict):
             parser.error(f"result file must contain a JSON object: {result_path}")
-        name = str(payload.get("model") or result_path.stem)
-        if name in records:
-            parser.error(f"duplicate model name '{name}' in supplied result files")
-        records[name] = payload
+        if "model" in payload:
+            named_records = {str(payload["model"]): payload}
+        elif payload and all(isinstance(value, dict) for value in payload.values()):
+            named_records = payload
+        else:
+            named_records = {result_path.stem: payload}
+        duplicates = set(records).intersection(named_records)
+        if duplicates:
+            parser.error(
+                f"duplicate model name(s) in supplied result files: {', '.join(sorted(duplicates))}"
+            )
+        records.update(named_records)
     try:
-        path = write_html_report(
-            records,
-            args.output,
-            experiment_name=args.experiment,
-            include_json=args.include_json,
+        path = ModelDietVisualizer(records).generate_report(
+            args.output, experiment_name=args.experiment, include_json=args.include_json
         )
     except (ImportError, OSError, TypeError, ValueError) as exc:
         parser.error(str(exc))

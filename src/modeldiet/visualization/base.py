@@ -8,36 +8,24 @@ selection, and theme styling belong here so every chart behaves consistently.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Self
 
-from modeldiet.result import ProfileResult
-from modeldiet.visualization.charts import Results
+from modeldiet.visualization.data import Results, available_metrics, validate_results
 
 
 class VisualizationBase:
     """Common result loading, validation, selection, and figure styling."""
 
     def __init__(self, results: Results, theme: str = "light") -> None:
-        if not isinstance(results, Mapping):
-            raise TypeError(
-                "results must be a mapping of model names to profile results"
-            )
         if theme not in {"light", "dark"}:
             raise ValueError("theme must be 'light' or 'dark'")
-        for name, record in results.items():
-            if not isinstance(name, str) or not name:
-                raise ValueError("model names must be non-empty strings")
-            if not isinstance(record, (ProfileResult, Mapping)):
-                raise TypeError(
-                    f"result for '{name}' must be a ProfileResult or mapping"
-                )
-        self.results: Results = dict(results)
+        self.results: Results = validate_results(results)
         self.theme = theme
 
     @classmethod
-    def from_file(cls, path: str | Path, theme: str = "light") -> VisualizationBase:
+    def from_file(cls, path: str | Path, theme: str = "light") -> Self:
         """Load a combined results file or a single benchmark-worker record."""
         source = Path(path)
         try:
@@ -59,23 +47,11 @@ class VisualizationBase:
             raise ValueError(f"Unknown model name(s): {', '.join(unknown)}")
         if not models:
             raise ValueError("models must select at least one model")
+        if len(set(models)) != len(models):
+            raise ValueError("models must not contain duplicate names")
         return {name: self.results[name] for name in models}
 
-    def _style(self, figure: Any) -> Any:
-        if self.theme == "dark":
-            figure.update_layout(
-                paper_bgcolor="#111827", plot_bgcolor="#111827", font_color="#e5e7eb"
-            )
-            figure.update_xaxes(
-                gridcolor="#374151",
-                linecolor="#4b5563",
-                title_font_color="#e5e7eb",
-                tickfont_color="#cbd5e1",
-            )
-            figure.update_yaxes(
-                gridcolor="#374151",
-                linecolor="#4b5563",
-                title_font_color="#e5e7eb",
-                tickfont_color="#cbd5e1",
-            )
-        return figure
+    @property
+    def available_metrics(self) -> dict[str, list[str]]:
+        """Map each available metric identifier to the models containing it."""
+        return available_metrics(self.results)

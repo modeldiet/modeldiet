@@ -9,7 +9,11 @@ from tkinter import ttk
 from typing import Any
 
 from modeldiet.result import ProfileResult
-from modeldiet.visualization.charts import _metric, _number
+from modeldiet.visualization.data import (
+    accuracy_value,
+    loading_time_value,
+    metric_number,
+)
 
 PALETTE = ("#276EF1", "#00A884", "#F59E0B", "#9B5DE5", "#E25555")
 BG = "#0B1220"
@@ -21,11 +25,9 @@ GRID = "#29364D"
 
 def _value(record: ProfileResult | Mapping[str, Any], metric: str) -> float | None:
     if metric == "accuracy":
-        return _number(record.get("accuracy") if isinstance(record, Mapping) else None)
+        return accuracy_value(record)
     if metric == "loading":
-        return _number(
-            record.get("loading_time") if isinstance(record, Mapping) else None
-        )
+        return loading_time_value(record)
     fields = {
         "mean": ("latency", "mean_ms"),
         "p50": ("latency", "p50_ms"),
@@ -38,10 +40,10 @@ def _value(record: ProfileResult | Mapping[str, Any], metric: str) -> float | No
         "size": ("pickle_size", "serialized_model_size_mb"),
     }
     measurement, key = fields[metric]
-    return _number(_metric(record, measurement, key))
+    return metric_number(record, measurement, key)
 
 
-class _BarChart(tk.Canvas):
+class _BarChart(tk.Canvas):  # pragma: no cover -- Tk rendering requires a display
     def __init__(
         self, master: tk.Misc, title: str, series: list[tuple[str, str]], **kwargs: Any
     ) -> None:
@@ -167,7 +169,9 @@ class _BarChart(tk.Canvas):
             )
 
 
-class _Tradeoff3D(tk.Canvas):
+class _Tradeoff3D(
+    tk.Canvas
+):  # pragma: no cover -- interactive canvas requires a display
     """Small rotatable 3D view of accuracy, P99 latency, and process RSS."""
 
     def __init__(self, master: tk.Misc, **kwargs: Any) -> None:
@@ -300,7 +304,7 @@ class _Tradeoff3D(tk.Canvas):
 
 def _build_results_window(
     root: tk.Tk, results: Mapping[str, ProfileResult | Mapping[str, Any]], title: str
-) -> None:
+) -> None:  # pragma: no cover -- Tk dashboard requires a display
     root.title(f"ModelDiet · {title}")
     root.geometry("1100x760")
     root.minsize(760, 600)
@@ -473,7 +477,7 @@ def _build_results_window(
 def show_results(
     results: Mapping[str, ProfileResult | Mapping[str, Any]],
     title: str = "Model comparison",
-) -> None:
+) -> None:  # pragma: no cover -- opening a native window requires a display
     """Open results in a native local window; no browser or server is used."""
     root = tk.Tk()
     _build_results_window(root, results, title)

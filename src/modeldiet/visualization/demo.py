@@ -114,7 +114,7 @@ def _profile_selection(
     return output
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover -- interactive Tk picker requires a display
     """Show a dataset/model picker and open one combined native dashboard."""
     try:
         root = tk.Tk()

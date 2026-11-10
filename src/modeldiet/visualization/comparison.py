@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
-from modeldiet.result import ProfileResult
-from modeldiet.visualization.charts import _metric, _number
+from modeldiet.visualization.data import (
+    Record,
+    Results,
+    accuracy_value,
+    loading_time_value,
+    metric_number,
+)
 
 METRICS: dict[str, tuple[str, str, str]] = {
     "accuracy": ("", "accuracy", "accuracy"),
@@ -31,22 +35,22 @@ METRICS: dict[str, tuple[str, str, str]] = {
 }
 
 
-def value_for(record: ProfileResult | Mapping[str, Any], metric: str) -> float | None:
+def value_for(record: Record, metric: str) -> float | None:
     """Extract a finite value for a public comparison metric identifier."""
     if metric not in METRICS:
         raise ValueError(
             f"Unknown comparison metric '{metric}'. Choose from: {', '.join(METRICS)}"
         )
     measurement, key, _ = METRICS[metric]
-    if metric in {"accuracy", "loading_time_s"}:
-        raw = record.get(key) if isinstance(record, Mapping) else None
-    else:
-        raw = _metric(record, measurement, key)
-    return _number(raw)
+    if metric == "accuracy":
+        return accuracy_value(record)
+    if metric == "loading_time_s":
+        return loading_time_value(record)
+    return metric_number(record, measurement, key)
 
 
 def pairwise_rows(
-    results: Mapping[str, ProfileResult | Mapping[str, Any]],
+    results: Results,
     model_a: str,
     model_b: str,
 ) -> list[dict[str, Any]]:
