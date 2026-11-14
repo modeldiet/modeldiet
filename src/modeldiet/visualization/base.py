@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Self
 
+from modeldiet.result import ProfileResult, RepeatedProfileResult
 from modeldiet.visualization.data import Results, available_metrics, validate_results
 
 
@@ -36,7 +37,20 @@ class VisualizationBase:
             ) from exc
         if not isinstance(payload, dict):
             raise ValueError("results JSON must contain an object")
-        results = {str(payload["model"]): payload} if "model" in payload else payload
+        results: Results
+        if payload.get("result_type") == "modeldiet.repeated_profile":
+            repeated = RepeatedProfileResult.from_dict(payload)
+            name = (
+                repeated.experiment_name or repeated.model_class or "Repeated profile"
+            )
+            results = {name: repeated}
+        elif "schema_version" in payload and "measurements" in payload:
+            single = ProfileResult.from_dict(payload)
+            results = {single.model_class or "Profile": single}
+        else:
+            results = (
+                {str(payload["model"]): payload} if "model" in payload else payload
+            )
         return cls(results, theme=theme)
 
     def _select(self, models: Sequence[str] | None) -> Results:

@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from tkinter import ttk
 from typing import Any
 
-from modeldiet.result import ProfileResult
+from modeldiet.result import ProfileResult, RepeatedProfileResult
 from modeldiet.visualization.data import (
     accuracy_value,
     loading_time_value,
@@ -23,7 +23,9 @@ MUTED = "#91A0B8"
 GRID = "#29364D"
 
 
-def _value(record: ProfileResult | Mapping[str, Any], metric: str) -> float | None:
+def _value(
+    record: ProfileResult | RepeatedProfileResult | Mapping[str, Any], metric: str
+) -> float | None:
     if metric == "accuracy":
         return accuracy_value(record)
     if metric == "loading":
@@ -50,11 +52,16 @@ class _BarChart(tk.Canvas):  # pragma: no cover -- Tk rendering requires a displ
         super().__init__(master, background=SURFACE, highlightthickness=0, **kwargs)
         self.title = title
         self.series = series
-        self.results: Mapping[str, ProfileResult | Mapping[str, Any]] = {}
+        self.results: Mapping[
+            str, ProfileResult | RepeatedProfileResult | Mapping[str, Any]
+        ] = {}
         self.bind("<Configure>", lambda _event: self.draw())
 
     def set_results(
-        self, results: Mapping[str, ProfileResult | Mapping[str, Any]]
+        self,
+        results: Mapping[
+            str, ProfileResult | RepeatedProfileResult | Mapping[str, Any]
+        ],
     ) -> None:
         self.results = results
         self.draw()
@@ -176,7 +183,9 @@ class _Tradeoff3D(
 
     def __init__(self, master: tk.Misc, **kwargs: Any) -> None:
         super().__init__(master, background=SURFACE, highlightthickness=0, **kwargs)
-        self.results: Mapping[str, ProfileResult | Mapping[str, Any]] = {}
+        self.results: Mapping[
+            str, ProfileResult | RepeatedProfileResult | Mapping[str, Any]
+        ] = {}
         self.yaw = 0.7
         self.pitch = 0.38
         self._drag: tuple[int, int] | None = None
@@ -185,7 +194,10 @@ class _Tradeoff3D(
         self.bind("<B1-Motion>", self._rotate)
 
     def set_results(
-        self, results: Mapping[str, ProfileResult | Mapping[str, Any]]
+        self,
+        results: Mapping[
+            str, ProfileResult | RepeatedProfileResult | Mapping[str, Any]
+        ],
     ) -> None:
         self.results = results
         self.draw()
@@ -303,7 +315,9 @@ class _Tradeoff3D(
 
 
 def _build_results_window(
-    root: tk.Tk, results: Mapping[str, ProfileResult | Mapping[str, Any]], title: str
+    root: tk.Tk,
+    results: Mapping[str, ProfileResult | RepeatedProfileResult | Mapping[str, Any]],
+    title: str,
 ) -> None:  # pragma: no cover -- Tk dashboard requires a display
     root.title(f"ModelDiet · {title}")
     root.geometry("1100x760")
@@ -475,7 +489,7 @@ def _build_results_window(
 
 
 def show_results(
-    results: Mapping[str, ProfileResult | Mapping[str, Any]],
+    results: Mapping[str, ProfileResult | RepeatedProfileResult | Mapping[str, Any]],
     title: str = "Model comparison",
 ) -> None:  # pragma: no cover -- opening a native window requires a display
     """Open results in a native local window; no browser or server is used."""

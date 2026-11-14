@@ -10,6 +10,8 @@ from modeldiet.visualization.data import (
     accuracy_value,
     latency_observations,
     metric_number,
+    repeated_metric_values,
+    repeated_series,
 )
 from modeldiet.visualization.theme import ACCENTS, apply_theme
 
@@ -442,3 +444,171 @@ def create_accuracy_latency_chart(results: Results, *, theme: str = "light") -> 
     fig.update_xaxes(title="Test accuracy", tickformat=".0%")
     fig.update_yaxes(title="P99 inference latency (ms)")
     return fig
+
+
+def create_repetition_variability_chart(
+    results: Results, metric: str = "latency.p99", *, theme: str = "light"
+) -> Any:
+    """Show one selected run-level metric value per independent repetition."""
+    go = _go()
+    figure = go.Figure()
+    for name, record in results.items():
+        values = repeated_metric_values(record, metric)
+        if values:
+            figure.add_trace(
+                go.Box(
+                    name=name,
+                    y=values,
+                    boxpoints="all",
+                    jitter=0.25,
+                    pointpos=0,
+                    marker_color=ACCENTS[len(figure.data) % len(ACCENTS)],
+                    hovertemplate="Independent-run value: %{y:.6g}<extra>%{fullData.name}</extra>",
+                )
+            )
+    if not figure.data:
+        figure.add_annotation(
+            text="Repeated-run results with the selected run-level metric are required.",
+            showarrow=False,
+        )
+    apply_theme(
+        figure,
+        "Run-to-run variability",
+        f"One {metric} value per independent repetition · no prediction observations pooled",
+        theme,
+    )
+    figure.update_yaxes(title=f"{metric} · metric unit")
+    figure.update_xaxes(title="Model or experiment")
+    return figure
+
+
+def create_batch_throughput_chart(results: Results, *, theme: str = "light") -> Any:
+    """Compare run-level mean throughput by batch size."""
+    go = _go()
+    figure = go.Figure()
+    for name, record in results.items():
+        means = repeated_series(record, "batch_throughput.samples_per_second.")
+        if not means:
+            continue
+        sizes = list(means)
+        identifiers = [
+            f"batch_throughput.samples_per_second.batch_size_{size}" for size in sizes
+        ]
+        errors = [
+            getattr(getattr(record, "summary", {}).get(identifier), "std_dev", 0.0)
+            for identifier in identifiers
+        ]
+        figure.add_trace(
+            go.Scatter(
+                name=name,
+                x=sizes,
+                y=[means[size] for size in sizes],
+                mode="lines+markers",
+                error_y={"type": "data", "array": errors, "visible": True},
+                hovertemplate="Batch size: %{x}<br>Mean throughput: %{y:.6g} samples/s<extra>%{fullData.name}</extra>",
+            )
+        )
+    if not figure.data:
+        figure.add_annotation(
+            text="Repeated results with BatchInferenceMeasurement are required.",
+            showarrow=False,
+        )
+    apply_theme(
+        figure,
+        "Throughput by batch size",
+        "Mean of each repetition's measured samples per second; error bars show run-to-run standard deviation",
+        theme,
+    )
+    figure.update_xaxes(title="Batch size", type="linear")
+    figure.update_yaxes(title="Throughput (samples/s)")
+    return figure
+
+
+def create_batch_latency_chart(results: Results, *, theme: str = "light") -> Any:
+    """Compare mean and P95 batch-call latency across batch sizes."""
+    go = _go()
+    figure = go.Figure()
+    for name, record in results.items():
+        for percentile, prefix, dash in (
+            ("Mean batch latency", "batch_latency.mean.", "solid"),
+            ("P95 batch latency", "batch_latency.p95.", "dash"),
+        ):
+            values = repeated_series(record, prefix)
+            if not values:
+                continue
+            figure.add_trace(
+                go.Scatter(
+                    name=f"{name} · {percentile}",
+                    x=list(values),
+                    y=list(values.values()),
+                    mode="lines+markers",
+                    line={"dash": dash},
+                    hovertemplate="Batch size: %{x}<br>Mean of per-run batch latency: %{y:.6g} ms<extra>%{fullData.name}</extra>",
+                )
+            )
+    if not figure.data:
+        figure.add_annotation(
+            text="Repeated results with BatchInferenceMeasurement are required.",
+            showarrow=False,
+        )
+    apply_theme(
+        figure,
+        "Batch-call latency by batch size",
+        "Mean and P95 summarize batch calls within each run; plotted values are means across independent runs",
+        theme,
+    )
+    figure.update_xaxes(title="Batch size", type="linear")
+    figure.update_yaxes(title="Batch-call latency (ms)")
+    return figure
+
+
+def create_peak_rss_comparison_chart(results: Results, *, theme: str = "light") -> Any:
+    """Compare means of sampled peak RSS across independent repetitions."""
+    go = _go()
+    figure = go.Figure()
+    names: list[str] = []
+    means: list[float] = []
+    errors: list[float] = []
+    methods: list[str] = []
+    for name, record in results.items():
+        aggregate = getattr(record, "summary", {}).get("peak_rss.sampled_peak")
+        if aggregate is None:
+            continue
+        names.append(name)
+        means.append(aggregate.mean)
+        errors.append(aggregate.std_dev)
+        method = "sampled process RSS"
+        for run in getattr(record, "runs", ()):
+            if run.result is None:
+                continue
+            measurement = run.result.measurements.get("peak_process_rss")
+            value = measurement.metrics.get("peak_rss_method") if measurement else None
+            if value is not None:
+                method = str(value.value)
+                break
+        methods.append(method)
+    if names:
+        figure.add_trace(
+            go.Bar(
+                name="Mean sampled peak RSS",
+                x=names,
+                y=means,
+                error_y={"type": "data", "array": errors, "visible": True},
+                customdata=methods,
+                hovertemplate="Model: %{x}<br>Mean sampled peak RSS: %{y:.6g} MiB<br>Method: %{customdata}<extra></extra>",
+            )
+        )
+    else:
+        figure.add_annotation(
+            text="Repeated results with PeakRSSMeasurement are required.",
+            showarrow=False,
+        )
+    apply_theme(
+        figure,
+        "Sampled peak process RSS",
+        "Whole-process RSS sampled during inference; brief spikes may be missed and values are not model-only",
+        theme,
+    )
+    figure.update_xaxes(title="Model or experiment")
+    figure.update_yaxes(title="Sampled peak RSS (MiB)")
+    return figure

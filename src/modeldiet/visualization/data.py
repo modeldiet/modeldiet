@@ -6,9 +6,9 @@ import math
 from collections.abc import Mapping
 from typing import Any, TypeAlias
 
-from modeldiet.result import ProfileResult
+from modeldiet.result import ProfileResult, RepeatedProfileResult
 
-Record: TypeAlias = ProfileResult | Mapping[str, Any]
+Record: TypeAlias = ProfileResult | RepeatedProfileResult | Mapping[str, Any]
 Results: TypeAlias = Mapping[str, Record]
 
 # One canonical mapping for ProfileResult measurement names, legacy JSON names,
@@ -39,16 +39,41 @@ def validate_results(results: Any) -> Results:
     """Validate and copy a name-to-result mapping with actionable errors."""
     if not isinstance(results, Mapping):
         raise TypeError("results must be a mapping of model names to profile results")
+    normalized: dict[str, Record] = {}
     for name, record in results.items():
         if not isinstance(name, str) or not name.strip():
             raise ValueError("model names must be non-empty strings")
-        if not isinstance(record, (ProfileResult, Mapping)):
+        if (
+            isinstance(record, Mapping)
+            and record.get("result_type") == "modeldiet.repeated_profile"
+        ):
+            record = RepeatedProfileResult.from_dict(record)
+        elif (
+            isinstance(record, Mapping)
+            and "schema_version" in record
+            and "measurements" in record
+        ):
+            record = ProfileResult.from_dict(record)
+        if not isinstance(record, (ProfileResult, RepeatedProfileResult, Mapping)):
             raise TypeError(f"result for '{name}' must be a ProfileResult or mapping")
-    return dict(results)
+        normalized[name] = record
+    return normalized
 
 
 def metric_value(record: Record, measurement: str, key: str) -> Any:
     """Read a metric from ProfileResult, nested mappings, or legacy flat JSON."""
+    if isinstance(record, RepeatedProfileResult):
+        metric_identifier: str | None = None
+        for run in record.runs:
+            if run.result is None:
+                continue
+            measured = run.result.measurements.get(measurement)
+            metric = measured.metrics.get(key) if measured else None
+            if metric is not None:
+                metric_identifier = metric.definition.identifier
+                break
+        aggregate = record.summary.get(metric_identifier) if metric_identifier else None
+        return aggregate.mean if aggregate is not None else None
     if isinstance(record, ProfileResult):
         measurement_result = record.measurements.get(measurement)
         value = measurement_result.metrics.get(key) if measurement_result else None
@@ -95,6 +120,51 @@ def latency_observations(record: Record) -> list[float]:
     if not isinstance(raw, (list, tuple)):
         return []
     return [value for item in raw if (value := number(item)) is not None]
+
+
+def repeated_metric_values(record: Record, identifier: str) -> list[float]:
+    """Return one finite metric value per successful independent repetition."""
+    if not isinstance(record, RepeatedProfileResult):
+        return []
+    values: list[float] = []
+    for run in record.runs:
+        if run.status != "completed" or run.result is None:
+            continue
+        for measured in run.result.measurements.values():
+            metric = next(
+                (
+                    value
+                    for value in measured.metrics.values()
+                    if value.definition.identifier == identifier
+                ),
+                None,
+            )
+            if metric is None:
+                continue
+            numeric = number(metric.value)
+            if numeric is not None:
+                values.append(numeric)
+            break
+    return values
+
+
+def repeated_series(record: Record, identifier_prefix: str) -> dict[int, float | None]:
+    """Return aggregate means indexed by a batch size suffix in metric IDs."""
+    if not isinstance(record, RepeatedProfileResult):
+        return {}
+    values: dict[int, float | None] = {}
+    for identifier, aggregate in record.summary.items():
+        if not identifier.startswith(identifier_prefix):
+            continue
+        suffix = identifier.rsplit("batch_size_", 1)
+        if len(suffix) != 2:
+            continue
+        try:
+            batch_size = int(suffix[1])
+        except ValueError:
+            continue
+        values[batch_size] = aggregate.mean
+    return dict(sorted(values.items()))
 
 
 def available_metrics(results: Results) -> dict[str, list[str]]:

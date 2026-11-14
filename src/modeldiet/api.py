@@ -42,3 +42,11 @@ def profile(
 
         return replace(result, environment=collect_environment())
     return result
+
+
+# Imported after the single-run API is defined: the isolated worker imports
+# ``profile`` from this module as its spawn-safe execution entry point.
+from modeldiet.profiling.repeated import (  # noqa: E402
+    RepeatedProfilingError,  # noqa: F401
+    profile_repeated,  # noqa: F401
+)

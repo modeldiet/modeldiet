@@ -55,6 +55,32 @@ class ModelDietVisualizer(VisualizationBase):
             self._select(models), theme=self.theme
         )
 
+    def plot_peak_rss_comparison(self, models: Sequence[str] | None = None) -> Any:
+        """Compare repeated-run mean sampled peak RSS, in MiB."""
+        return charts.create_peak_rss_comparison_chart(
+            self._select(models), theme=self.theme
+        )
+
+    def plot_repetition_variability(
+        self,
+        metric: str = "latency.p99",
+        models: Sequence[str] | None = None,
+    ) -> Any:
+        """Show one selected run-level metric value per independent repetition."""
+        return charts.create_repetition_variability_chart(
+            self._select(models), metric=metric, theme=self.theme
+        )
+
+    def plot_batch_throughput(self, models: Sequence[str] | None = None) -> Any:
+        """Show repeated-run mean throughput as batch size changes."""
+        return charts.create_batch_throughput_chart(
+            self._select(models), theme=self.theme
+        )
+
+    def plot_batch_latency(self, models: Sequence[str] | None = None) -> Any:
+        """Compare mean and P95 batch-call latency for each batch size."""
+        return charts.create_batch_latency_chart(self._select(models), theme=self.theme)
+
     def plot_python_memory(self, models: Sequence[str] | None = None) -> Any:
         """Return Python-traced peak allocation comparison, in MiB."""
         return charts.create_python_memory_chart(self._select(models), theme=self.theme)

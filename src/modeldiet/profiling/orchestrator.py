@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -79,6 +80,36 @@ _DEFINITIONS = {
         "Process RSS change",
         "Difference between whole-process RSS endpoint snapshots",
     ),
+    ("peak_process_rss", "rss_initial_mb"): MetricDefinition(
+        "peak_rss.initial",
+        "MiB",
+        "Whole-process RSS at the start of the sampled inference pass",
+        "Process-wide RSS starting value; includes the Python process and is not model-only",
+    ),
+    ("peak_process_rss", "rss_peak_observed_mb"): MetricDefinition(
+        "peak_rss.sampled_peak",
+        "MiB",
+        "Maximum whole-process RSS observed by periodic sampling",
+        "Sampled process RSS; short-lived peaks may be missed and this is not an OS high-water mark",
+    ),
+    ("peak_process_rss", "rss_peak_increment_mb"): MetricDefinition(
+        "peak_rss.sampled_increment",
+        "MiB",
+        "Sampled peak RSS above the initial process RSS",
+        "Difference between sampled whole-process peak and starting RSS; not model-only memory",
+    ),
+    ("peak_process_rss", "peak_rss_method"): MetricDefinition(
+        "peak_rss.method",
+        "method",
+        "Method used to observe process RSS",
+        "Identifies the sampled measurement method and its limitations",
+    ),
+    ("peak_process_rss", "sampling_interval_ms"): MetricDefinition(
+        "peak_rss.sampling_interval",
+        "ms",
+        "Configured interval between RSS samples",
+        "A short interval improves temporal resolution but cannot guarantee every allocation peak is observed",
+    ),
     ("pickle_size", "serialized_model_size_mb"): MetricDefinition(
         "pickle.size",
         "MiB",
@@ -90,8 +121,48 @@ _DEFINITIONS = {
     ),
 }
 
+_BATCH_KEY = re.compile(
+    r"batch_size_(?P<size>\d+)_(?P<metric>latency_(?:mean|p50|p95|p99)_ms|batch_count|sample_count|throughput_samples_per_second)"
+)
+
+
+def _batch_definition(key: str) -> MetricDefinition | None:
+    match = _BATCH_KEY.fullmatch(key)
+    if match is None:
+        return None
+    size = match.group("size")
+    metric = match.group("metric")
+    if metric.startswith("latency_"):
+        percentile = metric.removeprefix("latency_").removesuffix("_ms")
+        labels = {"mean": "Mean", "p50": "P50", "p95": "P95", "p99": "P99"}
+        identifier = f"batch_latency.{percentile}.batch_size_{size}"
+        return MetricDefinition(
+            identifier,
+            "ms",
+            f"{labels[percentile]} latency across measured batch calls",
+            f"Batch-call latency for batches of {size}; percentiles are across calls, not individual samples",
+        )
+    if metric == "throughput_samples_per_second":
+        return MetricDefinition(
+            f"batch_throughput.samples_per_second.batch_size_{size}",
+            "samples/s",
+            "Measured samples processed per second",
+            f"Number of samples divided by total measured predict time for batch size {size}; warmups are excluded",
+        )
+    label = "batches" if metric == "batch_count" else "samples"
+    return MetricDefinition(
+        f"batch_latency.{metric}.batch_size_{size}",
+        "count",
+        f"Number of {label} processed",
+        f"Measured inference work for batch size {size}; warmup calls are excluded",
+    )
+
 
 def _definition(name: str, key: str) -> MetricDefinition:
+    if name == "batch_inference":
+        batch_definition = _batch_definition(key)
+        if batch_definition is not None:
+            return batch_definition
     return _DEFINITIONS.get(
         (name, key),
         MetricDefinition(

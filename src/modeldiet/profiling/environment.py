@@ -23,12 +23,14 @@ def collect_environment() -> dict[str, Any]:
     return {
         "python_version": sys.version,
         "platform": platform.platform(),
+        "machine_architecture": platform.machine(),
         "processor": platform.processor(),
         "cpu_count_logical": psutil.cpu_count(logical=True),
         "cpu_count_physical": psutil.cpu_count(logical=False),
         "total_ram_gb": round(psutil.virtual_memory().total / (1024**3), 2),
         "cpu_frequency_mhz": cpu_frequency.current if cpu_frequency else None,
         "numpy_version": np.__version__,
+        "pandas_version": _package_version("pandas"),
         "sklearn_version": _package_version("scikit-learn"),
         "xgboost_version": _package_version("xgboost"),
         "thread_environment": {

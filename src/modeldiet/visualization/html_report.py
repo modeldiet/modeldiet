@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from modeldiet.result import ProfileResult
+from modeldiet.result import ProfileResult, RepeatedProfileResult
 from modeldiet.visualization import charts
 from modeldiet.visualization.comparison import METRICS, value_for
 from modeldiet.visualization.data import (
@@ -176,6 +176,8 @@ TAB_SCRIPT = """
 
 def _safe_json(value: Any) -> Any:
     if isinstance(value, ProfileResult):
+        return value._json_value()
+    if isinstance(value, RepeatedProfileResult):
         return value._json_value()
     if isinstance(value, Mapping):
         return {str(key): _safe_json(item) for key, item in value.items()}
@@ -375,6 +377,53 @@ def _metadata(results: Results) -> str:
             items.append(
                 ("Model configuration", f"{record.model_module}.{record.model_class}")
             )
+        elif isinstance(record, RepeatedProfileResult):
+            if record.environment:
+                items.extend(
+                    (f"Environment · {key.replace('_', ' ')}", value)
+                    for key, value in record.environment.items()
+                )
+            items.extend(
+                [
+                    (
+                        "Repetitions",
+                        {
+                            "requested": record.repetitions_requested,
+                            "completed": record.repetitions_completed,
+                            "failed": len(record.failed_runs),
+                        },
+                    ),
+                    (
+                        "Model configuration",
+                        f"{record.model_module}.{record.model_class}",
+                    ),
+                    ("Workload configuration", record.workload),
+                    (
+                        "Run-level summary",
+                        {
+                            identifier: {
+                                "mean": stats.mean,
+                                "std_dev": stats.std_dev,
+                                "coefficient_of_variation_percent": stats.coefficient_of_variation,
+                                "n": stats.n,
+                                "unit": stats.definition.unit,
+                            }
+                            for identifier, stats in record.summary.items()
+                        },
+                    ),
+                    (
+                        "Failed repetitions",
+                        [
+                            {
+                                "repetition_index": run.repetition_index,
+                                "error_type": run.error_type,
+                                "error_message": run.error_message,
+                            }
+                            for run in record.failed_runs
+                        ],
+                    ),
+                ]
+            )
         elif isinstance(record, Mapping):
             env = record.get("environment")
             if isinstance(env, Mapping):
@@ -488,6 +537,10 @@ def write_html_report(
                     "Python-traced memory",
                     charts.create_python_memory_chart(results, theme=theme),
                 ),
+                (
+                    "Sampled peak process RSS",
+                    charts.create_peak_rss_comparison_chart(results, theme=theme),
+                ),
             ],
         ),
         (
@@ -515,6 +568,29 @@ def write_html_report(
             ],
         ),
     ]
+    if any(isinstance(record, RepeatedProfileResult) for record in results.values()):
+        figures.append(
+            (
+                "repeated",
+                "Repeated runs",
+                [
+                    (
+                        "Run-to-run P99 variability",
+                        charts.create_repetition_variability_chart(
+                            results, "latency.p99", theme=theme
+                        ),
+                    ),
+                    (
+                        "Throughput by batch size",
+                        charts.create_batch_throughput_chart(results, theme=theme),
+                    ),
+                    (
+                        "Batch-call latency by batch size",
+                        charts.create_batch_latency_chart(results, theme=theme),
+                    ),
+                ],
+            )
+        )
     plot_blocks: list[str] = []
     include_plotly = True
     colors = THEMES[theme]

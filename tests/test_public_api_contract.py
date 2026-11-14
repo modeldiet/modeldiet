@@ -8,18 +8,35 @@ import warnings
 
 def test_supported_root_imports_and_public_names():
     import modeldiet
-    from modeldiet import ProfileResult, profile
+    from modeldiet import (
+        ProfileResult,
+        RepeatedProfileResult,
+        RepeatedProfilingError,
+        profile,
+        profile_repeated,
+    )
 
     assert callable(profile)
+    assert callable(profile_repeated)
     assert ProfileResult is modeldiet.ProfileResult
-    assert modeldiet.__all__ == ["profile", "ProfileResult"]
+    assert RepeatedProfileResult is modeldiet.RepeatedProfileResult
+    assert RepeatedProfilingError is modeldiet.RepeatedProfilingError
+    assert modeldiet.__all__ == [
+        "profile",
+        "profile_repeated",
+        "RepeatedProfilingError",
+        "ProfileResult",
+        "RepeatedProfileResult",
+    ]
 
 
 def test_supported_measurement_imports_and_public_names():
     import modeldiet.profiling as profiling
     from modeldiet.profiling import (
         BaseMeasurement,
+        BatchInferenceMeasurement,
         LatencyMeasurement,
+        PeakRSSMeasurement,
         ProcessRSSMeasurement,
         SerializationMeasurement,
         TracedAllocationMeasurement,
@@ -27,7 +44,9 @@ def test_supported_measurement_imports_and_public_names():
 
     assert profiling.__all__ == [
         "BaseMeasurement",
+        "BatchInferenceMeasurement",
         "LatencyMeasurement",
+        "PeakRSSMeasurement",
         "ProcessRSSMeasurement",
         "SerializationMeasurement",
         "TracedAllocationMeasurement",
@@ -36,7 +55,9 @@ def test_supported_measurement_imports_and_public_names():
         isinstance(measurement(), BaseMeasurement)
         for measurement in (
             LatencyMeasurement,
+            BatchInferenceMeasurement,
             ProcessRSSMeasurement,
+            PeakRSSMeasurement,
             SerializationMeasurement,
             TracedAllocationMeasurement,
         )
@@ -45,11 +66,14 @@ def test_supported_measurement_imports_and_public_names():
 
 def test_supported_result_record_imports():
     from modeldiet.result import (
+        AggregateMetricStatistics,
         MeasurementError,
         MeasurementResult,
         MetricDefinition,
         MetricValue,
         ProfileResult,
+        RepeatedProfileResult,
+        RepeatedRunResult,
     )
 
     assert all(
@@ -60,6 +84,9 @@ def test_supported_result_record_imports():
             MeasurementError,
             MeasurementResult,
             ProfileResult,
+            AggregateMetricStatistics,
+            RepeatedProfileResult,
+            RepeatedRunResult,
         )
     )
 
@@ -114,16 +141,14 @@ def test_ordinary_import_has_no_optional_ml_dependencies(tmp_path):
         [
             sys.executable,
             "-c",
-            textwrap.dedent(
-                """
+            textwrap.dedent("""
                 import sys
                 import modeldiet
 
                 assert callable(modeldiet.profile)
                 assert "sklearn" not in sys.modules
                 assert "xgboost" not in sys.modules
-                """
-            ),
+                """),
         ],
         cwd=tmp_path,
         env=os.environ.copy(),
